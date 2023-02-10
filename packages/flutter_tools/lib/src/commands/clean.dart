@@ -5,6 +5,7 @@
 import 'package:meta/meta.dart';
 
 import '../../src/macos/xcode.dart';
+import '../base/common.dart';
 import '../base/file_system.dart';
 import '../base/logger.dart';
 import '../build_info.dart';
@@ -18,6 +19,10 @@ class CleanCommand extends FlutterCommand {
     bool verbose = false,
   }) : _verbose = verbose {
     requiresPubspecYaml();
+    argParser.addOption(
+      'scheme',
+      help: 'When cleaning Xcode schemes, clean only the specified scheme.'
+    );
   }
 
   final bool _verbose;
@@ -81,11 +86,22 @@ class CleanCommand extends FlutterCommand {
     try {
       final XcodeProjectInterpreter xcodeProjectInterpreter = globals.xcodeProjectInterpreter!;
       final XcodeProjectInfo projectInfo = (await xcodeProjectInterpreter.getInfo(xcodeWorkspace.parent.path))!;
-      for (final String scheme in projectInfo.schemes) {
+      if (argResults?.wasParsed('scheme') ?? false) {
+        final String scheme = argResults!['scheme'] as String;
+        if (scheme.isEmpty) {
+          throwToolExit('No scheme was specified for --scheme');
+        }
+        if (!projectInfo.schemes.contains(scheme)) {
+          throwToolExit('Scheme "$scheme" not found in ${projectInfo.schemes}');
+        }
         await xcodeProjectInterpreter.cleanWorkspace(xcodeWorkspace.path, scheme, verbose: _verbose);
+      } else {
+        for (final String scheme in projectInfo.schemes) {
+          await xcodeProjectInterpreter.cleanWorkspace(xcodeWorkspace.path, scheme, verbose: _verbose);
+        }
       }
     } on Exception catch (error) {
-      globals.printTrace('Could not clean Xcode workspace: $error');
+      throwToolExit('Could not clean Xcode workspace: $error');
     } finally {
       xcodeStatus.stop();
     }
